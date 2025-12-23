@@ -123,15 +123,27 @@ export function useAuth() {
         setLoading(false);
     };
 
-    const updateUserRole = async (_userId: string, _newRole: UserRole) => {
+    const updateUserRole = async (userId: string, newRole: UserRole) => {
         // Only owner can update roles
         if (user?.role !== 'owner') {
             throw new Error("Only the owner can update user roles");
         }
 
-        // For now, roles are determined by email only
-        // To enable dynamic roles, you'd need to fix the profiles table RLS
-        throw new Error("Role updates require fixing profiles table RLS policies");
+        try {
+            // Update role in profiles table
+            const { error } = await supabase
+                .from('profiles')
+                .update({ role: newRole })
+                .eq('id', userId);
+
+            if (error) {
+                console.error('Error updating role:', error);
+                throw new Error(error.message);
+            }
+        } catch (err) {
+            console.error('Failed to update user role:', err);
+            throw err;
+        }
     };
 
     const getAllUsers = async (): Promise<User[]> => {
