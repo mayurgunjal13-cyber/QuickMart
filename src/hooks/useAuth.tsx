@@ -109,30 +109,19 @@ export function useAuth() {
         setLoading(true);
 
         try {
-            console.log('Attempting sign in for:', email);
-
-            const { data, error } = await supabase.auth.signInWithPassword({
+            const { error } = await supabase.auth.signInWithPassword({
                 email,
                 password: password || ''
             });
 
             if (error) {
-                console.error('Sign in error:', error);
                 setLoading(false);
                 throw new Error(error.message);
             }
 
-            console.log('Sign in successful, user:', data.user?.id);
-
-            if (data.user) {
-                const profile = await fetchProfile(data.user);
-                console.log('Profile fetched:', profile);
-                setUser(profile);
-            }
-
-            setLoading(false);
+            // Auth state change listener will handle fetching profile and setting user
+            // Loading will be set to false by the listener
         } catch (err) {
-            console.error('Sign in caught error:', err);
             setLoading(false);
             throw err;
         }
