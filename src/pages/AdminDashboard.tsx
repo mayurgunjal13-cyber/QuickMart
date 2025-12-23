@@ -33,20 +33,30 @@ const AdminDashboard = () => {
     useEffect(() => {
         const loadData = async () => {
             if (user && (user.role === 'admin' || user.role === 'owner')) {
-                const allUsers = await getAllUsers();
-                setUsers(allUsers);
+                try {
+                    const allUsers = await getAllUsers();
+                    setUsers(allUsers);
+                } catch (error) {
+                    console.error('Failed to load users:', error);
+                    setUsers([]);
+                }
 
-                // Load orders from Supabase
-                const { getAllOrders } = await import("@/data/orders");
-                const allOrders = await getAllOrders();
-                setOrders(allOrders.map(o => ({
-                    id: o.id,
-                    date: o.createdAt,
-                    items: o.items,
-                    total: o.total,
-                    customerName: 'Customer', // Profile name not available in order
-                    userId: o.userId
-                })));
+                try {
+                    // Load orders from Supabase
+                    const { getAllOrders } = await import("@/data/orders");
+                    const allOrders = await getAllOrders();
+                    setOrders(allOrders.map(o => ({
+                        id: o.id,
+                        date: o.createdAt,
+                        items: o.items,
+                        total: o.total,
+                        customerName: 'Customer',
+                        userId: o.userId
+                    })));
+                } catch (error) {
+                    console.error('Failed to load orders:', error);
+                    setOrders([]);
+                }
             }
         };
         loadData();
