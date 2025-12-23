@@ -1,0 +1,14 @@
+/* Basic print styles */
+@media print {
+    @page {
+        size: auto;
+        margin: 0;
+    }
+
+    body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Hide standard header/footer behaviors if they interfere */
+}
