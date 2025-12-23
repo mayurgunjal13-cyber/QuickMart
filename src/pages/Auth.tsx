@@ -65,29 +65,38 @@ const Auth = () => {
                     <div className="space-y-2">
                         {isSignUp && (
                             <Input
+                                id="name"
+                                name="name"
                                 type="text"
                                 placeholder="Enter your name"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 className="h-11"
                                 required={isSignUp}
+                                autoComplete="name"
                             />
                         )}
                         <Input
+                            id="email"
+                            name="email"
                             type="email"
                             placeholder="Enter your email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             className="h-11"
                             required
+                            autoComplete="email"
                         />
                         <Input
+                            id="password"
+                            name="password"
                             type="password"
                             placeholder="Enter your password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             className="h-11"
                             required
+                            autoComplete={isSignUp ? "new-password" : "current-password"}
                         />
                     </div>
                     <Button
