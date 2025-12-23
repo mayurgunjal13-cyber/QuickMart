@@ -135,9 +135,34 @@ export function useAuth() {
     };
 
     const getAllUsers = async (): Promise<User[]> => {
-        // This would require admin access to list users
-        // For now, return empty array
-        return [];
+        // Only owner and admin can get all users
+        if (user?.role !== 'owner' && user?.role !== 'admin') {
+            return [];
+        }
+
+        try {
+            // Query profiles table to get all users
+            const { data: profiles, error } = await supabase
+                .from('profiles')
+                .select('id, name, role');
+
+            if (error) {
+                console.error('Error fetching all users:', error);
+                return [];
+            }
+
+            // Get auth users to get emails
+            // Since we can't access auth.users directly, map profiles without email
+            return (profiles || []).map(profile => ({
+                id: profile.id,
+                email: '', // Email not available in profiles table
+                name: profile.name || 'User',
+                role: profile.role as UserRole
+            }));
+        } catch (error) {
+            console.error('Failed to fetch users:', error);
+            return [];
+        }
     };
 
     return {
