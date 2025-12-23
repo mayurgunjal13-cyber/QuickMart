@@ -93,8 +93,13 @@ export const deleteProduct = async (id: number): Promise<boolean> => {
 
 // Subscribe to real-time product changes
 export const subscribeToProducts = (callback: (products: Product[]) => void) => {
-    // Initial fetch
-    getProducts().then(callback);
+    // Initial fetch with error handling
+    getProducts()
+        .then(callback)
+        .catch(error => {
+            console.error('Error in initial products fetch:', error);
+            callback([]); // Return empty array on error
+        });
 
     // Subscribe to changes
     const subscription = supabase
@@ -103,9 +108,13 @@ export const subscribeToProducts = (callback: (products: Product[]) => void) => 
             'postgres_changes',
             { event: '*', schema: 'public', table: 'products' },
             async () => {
-                // Refetch all products on any change
-                const products = await getProducts();
-                callback(products);
+                try {
+                    // Refetch all products on any change
+                    const products = await getProducts();
+                    callback(products);
+                } catch (error) {
+                    console.error('Error refetching products:', error);
+                }
             }
         )
         .subscribe();
