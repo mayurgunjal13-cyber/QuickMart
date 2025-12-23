@@ -13,9 +13,31 @@ export interface User {
 
 const OWNER_EMAIL = "mayurgunjal13@gmail.com";
 
-// Helper to create user from Supabase auth user (no DB call needed)
-const createUserFromAuth = (supabaseUser: SupabaseUser): User => {
+// Helper to create user from Supabase auth user + profile
+const createUserFromAuth = async (supabaseUser: SupabaseUser): Promise<User> => {
     const email = supabaseUser.email || '';
+
+    // Try to get role from profiles table
+    try {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('name, role')
+            .eq('id', supabaseUser.id)
+            .single();
+
+        if (profile) {
+            return {
+                id: supabaseUser.id,
+                email: email,
+                name: profile.name || supabaseUser.user_metadata?.name || email.split('@')[0] || 'User',
+                role: profile.role as UserRole
+            };
+        }
+    } catch (error) {
+        console.error('Error fetching profile role:', error);
+    }
+
+    // Fallback if profile fetch fails
     return {
         id: supabaseUser.id,
         email: email,
@@ -35,7 +57,8 @@ export function useAuth() {
                 const { data: { session } } = await supabase.auth.getSession();
 
                 if (session?.user) {
-                    setUser(createUserFromAuth(session.user));
+                    const userProfile = await createUserFromAuth(session.user);
+                    setUser(userProfile);
                 } else {
                     setUser(null);
                 }
@@ -55,7 +78,8 @@ export function useAuth() {
                 console.log('Auth state changed:', event);
 
                 if (session?.user) {
-                    setUser(createUserFromAuth(session.user));
+                    const userProfile = await createUserFromAuth(session.user);
+                    setUser(userProfile);
                 } else {
                     setUser(null);
                 }
