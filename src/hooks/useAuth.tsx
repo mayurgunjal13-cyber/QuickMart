@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { supabase, DbProfile } from "@/integrations/supabase/client";
-import { User as SupabaseUser } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
+import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 
 export type UserRole = 'owner' | 'admin' | 'customer';
 
@@ -13,56 +13,20 @@ export interface User {
 
 const OWNER_EMAIL = "mayurgunjal13@gmail.com";
 
+// Helper to create user from Supabase auth user (no DB call needed)
+const createUserFromAuth = (supabaseUser: SupabaseUser): User => {
+    const email = supabaseUser.email || '';
+    return {
+        id: supabaseUser.id,
+        email: email,
+        name: supabaseUser.user_metadata?.name || email.split('@')[0] || 'User',
+        role: email === OWNER_EMAIL ? 'owner' : 'customer'
+    };
+};
+
 export function useAuth() {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-
-    // Fetch profile from Supabase
-    const fetchProfile = async (supabaseUser: SupabaseUser): Promise<User | null> => {
-        try {
-            const { data: profile, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', supabaseUser.id)
-                .single();
-
-            if (error) {
-                console.error('Error fetching profile:', error);
-                // If profile doesn't exist yet (race condition), create it
-                if (error.code === 'PGRST116') {
-                    const newProfile = {
-                        id: supabaseUser.id,
-                        name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
-                        role: supabaseUser.email === OWNER_EMAIL ? 'owner' : 'customer'
-                    };
-
-                    const { error: insertError } = await supabase
-                        .from('profiles')
-                        .insert(newProfile);
-
-                    if (!insertError) {
-                        return {
-                            id: supabaseUser.id,
-                            email: supabaseUser.email || '',
-                            name: newProfile.name,
-                            role: newProfile.role as UserRole
-                        };
-                    }
-                }
-                return null;
-            }
-
-            return {
-                id: supabaseUser.id,
-                email: supabaseUser.email || '',
-                name: profile.name || supabaseUser.email?.split('@')[0] || 'User',
-                role: (profile.role || 'customer') as UserRole
-            };
-        } catch (err) {
-            console.error('Error in fetchProfile:', err);
-            return null;
-        }
-    };
 
     useEffect(() => {
         // Get initial session
@@ -71,20 +35,7 @@ export function useAuth() {
                 const { data: { session } } = await supabase.auth.getSession();
 
                 if (session?.user) {
-                    // Try to fetch profile, but don't block on failure
-                    try {
-                        const profile = await fetchProfile(session.user);
-                        setUser(profile);
-                    } catch (profileError) {
-                        console.error('Profile fetch failed, using basic user info');
-                        // Set basic user info even if profile fails
-                        setUser({
-                            id: session.user.id,
-                            email: session.user.email || '',
-                            name: session.user.email?.split('@')[0] || 'User',
-                            role: session.user.email === OWNER_EMAIL ? 'owner' : 'customer'
-                        });
-                    }
+                    setUser(createUserFromAuth(session.user));
                 } else {
                     setUser(null);
                 }
@@ -99,28 +50,19 @@ export function useAuth() {
         initAuth();
 
         // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            console.log('Auth state changed:', event);
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+            async (event: string, session: Session | null) => {
+                console.log('Auth state changed:', event);
 
-            if (event === 'SIGNED_IN' && session?.user) {
-                try {
-                    const profile = await fetchProfile(session.user);
-                    setUser(profile);
-                } catch (profileError) {
-                    console.error('Profile fetch failed in listener, using basic info');
-                    setUser({
-                        id: session.user.id,
-                        email: session.user.email || '',
-                        name: session.user.email?.split('@')[0] || 'User',
-                        role: session.user.email === OWNER_EMAIL ? 'owner' : 'customer'
-                    });
+                if (session?.user) {
+                    setUser(createUserFromAuth(session.user));
+                } else {
+                    setUser(null);
                 }
-            } else if (event === 'SIGNED_OUT') {
-                setUser(null);
-            }
 
-            setLoading(false);
-        });
+                setLoading(false);
+            }
+        );
 
         return () => {
             subscription.unsubscribe();
@@ -141,8 +83,7 @@ export function useAuth() {
                 throw new Error(error.message);
             }
 
-            // Auth state change listener will handle fetching profile and setting user
-            // Loading will be set to false by the listener
+            // Auth state change listener will set the user
         } catch (err) {
             setLoading(false);
             throw err;
@@ -152,30 +93,27 @@ export function useAuth() {
     const signUp = async (name: string, email: string, password?: string) => {
         setLoading(true);
 
-        const { data, error } = await supabase.auth.signUp({
-            email,
-            password: password || '',
-            options: {
-                data: {
-                    name: name
+        try {
+            const { error } = await supabase.auth.signUp({
+                email,
+                password: password || '',
+                options: {
+                    data: {
+                        name: name
+                    }
                 }
+            });
+
+            if (error) {
+                setLoading(false);
+                throw new Error(error.message);
             }
-        });
 
-        if (error) {
+            // Auth state change listener will set the user
+        } catch (err) {
             setLoading(false);
-            throw new Error(error.message);
+            throw err;
         }
-
-        // Note: Profile is created automatically by database trigger
-        if (data.user) {
-            // Wait a bit for the trigger to create the profile
-            await new Promise(resolve => setTimeout(resolve, 500));
-            const profile = await fetchProfile(data.user);
-            setUser(profile);
-        }
-
-        setLoading(false);
     };
 
     const signOut = async () => {
@@ -191,49 +129,15 @@ export function useAuth() {
             throw new Error("Only the owner can update user roles");
         }
 
-        // Get the user's email to check if it's the owner
-        const { data: targetProfile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .single();
-
-        // For safety, we check the profile role
-        if (targetProfile?.role === 'owner') {
-            throw new Error("Cannot change owner's role");
-        }
-
-        const { error } = await supabase
-            .from('profiles')
-            .update({ role: newRole })
-            .eq('id', userId);
-
-        if (error) {
-            throw new Error(error.message);
-        }
+        // For now, roles are determined by email only
+        // To enable dynamic roles, you'd need to fix the profiles table RLS
+        throw new Error("Role updates require fixing profiles table RLS policies");
     };
 
     const getAllUsers = async (): Promise<User[]> => {
-        // Only owner and admin can get all users
-        if (user?.role !== 'owner' && user?.role !== 'admin') {
-            return [];
-        }
-
-        const { data: profiles, error } = await supabase
-            .from('profiles')
-            .select('*');
-
-        if (error) {
-            console.error('Error fetching users:', error);
-            return [];
-        }
-
-        return profiles.map((profile: DbProfile) => ({
-            id: profile.id,
-            email: '', // Email not stored in profiles for privacy
-            name: profile.name || 'User',
-            role: profile.role as UserRole
-        }));
+        // This would require admin access to list users
+        // For now, return empty array
+        return [];
     };
 
     return {
