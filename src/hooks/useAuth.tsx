@@ -71,8 +71,20 @@ export function useAuth() {
                 const { data: { session } } = await supabase.auth.getSession();
 
                 if (session?.user) {
-                    const profile = await fetchProfile(session.user);
-                    setUser(profile);
+                    // Try to fetch profile, but don't block on failure
+                    try {
+                        const profile = await fetchProfile(session.user);
+                        setUser(profile);
+                    } catch (profileError) {
+                        console.error('Profile fetch failed, using basic user info');
+                        // Set basic user info even if profile fails
+                        setUser({
+                            id: session.user.id,
+                            email: session.user.email || '',
+                            name: session.user.email?.split('@')[0] || 'User',
+                            role: session.user.email === OWNER_EMAIL ? 'owner' : 'customer'
+                        });
+                    }
                 } else {
                     setUser(null);
                 }
@@ -91,8 +103,18 @@ export function useAuth() {
             console.log('Auth state changed:', event);
 
             if (event === 'SIGNED_IN' && session?.user) {
-                const profile = await fetchProfile(session.user);
-                setUser(profile);
+                try {
+                    const profile = await fetchProfile(session.user);
+                    setUser(profile);
+                } catch (profileError) {
+                    console.error('Profile fetch failed in listener, using basic info');
+                    setUser({
+                        id: session.user.id,
+                        email: session.user.email || '',
+                        name: session.user.email?.split('@')[0] || 'User',
+                        role: session.user.email === OWNER_EMAIL ? 'owner' : 'customer'
+                    });
+                }
             } else if (event === 'SIGNED_OUT') {
                 setUser(null);
             }
