@@ -4,6 +4,7 @@ import { useAuth, User } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Users, Package, Shield, ShoppingCart } from "lucide-react";
 import ProductManagement from "@/components/ProductManagement";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Order {
     id: string;
@@ -45,12 +46,24 @@ const AdminDashboard = () => {
                     // Load orders from Supabase
                     const { getAllOrders } = await import("@/data/orders");
                     const allOrders = await getAllOrders();
+
+                    // Fetch customer names from profiles for each unique user
+                    const userIds = [...new Set(allOrders.map(o => o.userId))];
+                    const { data: profiles } = await supabase
+                        .from('profiles')
+                        .select('id, name')
+                        .in('id', userIds);
+
+                    const userNamesMap = new Map(
+                        (profiles || []).map(p => [p.id, p.name || 'Unknown'])
+                    );
+
                     setOrders(allOrders.map(o => ({
                         id: o.id,
                         date: o.createdAt,
                         items: o.items,
                         total: o.total,
-                        customerName: 'Customer',
+                        customerName: userNamesMap.get(o.userId) || 'Unknown',
                         userId: o.userId
                     })));
                 } catch (error) {
