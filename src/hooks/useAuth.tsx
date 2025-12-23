@@ -123,7 +123,7 @@ export function useAuth() {
         setLoading(false);
     };
 
-    const updateUserRole = async (userId: string, newRole: UserRole) => {
+    const updateUserRole = async (_userId: string, _newRole: UserRole) => {
         // Only owner can update roles
         if (user?.role !== 'owner') {
             throw new Error("Only the owner can update user roles");
