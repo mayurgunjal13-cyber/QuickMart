@@ -88,8 +88,17 @@ export function useAuth() {
             }
         );
 
+        // Auto-logout when browser tab/window is closed
+        const handleBeforeUnload = () => {
+            // Sign out when tab is closed
+            supabase.auth.signOut();
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
         return () => {
             subscription.unsubscribe();
+            window.removeEventListener('beforeunload', handleBeforeUnload);
         };
     }, []);
 
