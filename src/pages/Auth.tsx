@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,16 @@ const Auth = () => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
-    const { signIn, signUp, loading } = useAuth();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const { signIn, signUp, user, loading } = useAuth();
     const navigate = useNavigate();
+
+    // Redirect to home when user is authenticated
+    useEffect(() => {
+        if (user && !loading) {
+            navigate("/", { replace: true });
+        }
+    }, [user, loading, navigate]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -28,17 +36,34 @@ const Auth = () => {
             return;
         }
 
+        setIsSubmitting(true);
+
         try {
             if (isSignUp) {
                 await signUp(name, email, password);
             } else {
                 await signIn(email, password);
             }
-            navigate("/");
+            // Don't navigate here - useEffect will handle redirect when user state updates
         } catch (err) {
             setError(err instanceof Error ? err.message : "An error occurred");
+            setIsSubmitting(false);
         }
     };
+
+    // Show loading spinner while checking initial auth state
+    if (loading && !isSubmitting) {
+        return (
+            <div className="min-h-screen gradient-warm flex items-center justify-center p-4">
+                <div className="text-center">
+                    <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center shadow-glow mb-4 mx-auto animate-pulse">
+                        <Store className="w-8 h-8 text-primary-foreground" />
+                    </div>
+                    <p className="text-muted-foreground">Loading...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen gradient-warm flex items-center justify-center p-4">
@@ -74,6 +99,7 @@ const Auth = () => {
                                 className="h-11"
                                 required={isSignUp}
                                 autoComplete="name"
+                                disabled={isSubmitting}
                             />
                         )}
                         <Input
@@ -86,6 +112,7 @@ const Auth = () => {
                             className="h-11"
                             required
                             autoComplete="email"
+                            disabled={isSubmitting}
                         />
                         <Input
                             id="password"
@@ -97,14 +124,15 @@ const Auth = () => {
                             className="h-11"
                             required
                             autoComplete={isSignUp ? "new-password" : "current-password"}
+                            disabled={isSubmitting}
                         />
                     </div>
                     <Button
                         type="submit"
                         className="w-full gradient-primary shadow-glow h-11"
-                        disabled={loading}
+                        disabled={isSubmitting}
                     >
-                        {loading ? "Please wait..." : (isSignUp ? "Sign Up" : "Sign In")}
+                        {isSubmitting ? "Please wait..." : (isSignUp ? "Sign Up" : "Sign In")}
                     </Button>
 
                     <div className="text-center">
@@ -112,6 +140,7 @@ const Auth = () => {
                             type="button"
                             onClick={() => setIsSignUp(!isSignUp)}
                             className="text-sm text-primary hover:underline"
+                            disabled={isSubmitting}
                         >
                             {isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
                         </button>
@@ -123,3 +152,4 @@ const Auth = () => {
 };
 
 export default Auth;
+
