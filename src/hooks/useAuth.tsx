@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, ReactNode, useCallback, useRef } from "react";
+import { useState, useEffect, createContext, useContext, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 
@@ -65,41 +65,44 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-    const initialLoadDone = useRef(false);
 
     useEffect(() => {
-        // Prevent double initialization in strict mode
-        if (initialLoadDone.current) return;
-        initialLoadDone.current = true;
+        let isMounted = true;
+        console.log('AuthProvider: Setting up auth');
 
-        console.log('AuthProvider: Starting initialization');
-
-        // Set up auth state change listener FIRST
+        // Set up auth state change listener
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event: string, session: Session | null) => {
                 console.log('Auth state changed:', event, session?.user?.email);
+
+                if (!isMounted) return;
 
                 if (session?.user) {
                     try {
                         const userProfile = await createUserFromAuth(session.user);
                         console.log('User profile created:', userProfile.email);
-                        setUser(userProfile);
+                        if (isMounted) {
+                            setUser(userProfile);
+                            setLoading(false);
+                        }
                     } catch (error) {
                         console.error('Error creating user profile:', error);
-                        setUser(null);
+                        if (isMounted) {
+                            setUser(null);
+                            setLoading(false);
+                        }
                     }
                 } else {
-                    console.log('No user in session, setting user to null');
-                    setUser(null);
+                    console.log('No user in session');
+                    if (isMounted) {
+                        setUser(null);
+                        setLoading(false);
+                    }
                 }
-
-                // Always set loading to false after auth state change
-                setLoading(false);
             }
         );
 
-        // Then get the initial session - this will trigger onAuthStateChange
-        // if there's an existing session
+        // Check for existing session
         const checkSession = async () => {
             try {
                 console.log('AuthProvider: Checking for existing session');
@@ -107,26 +110,33 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
                 if (error) {
                     console.error('Error getting session:', error);
-                    setLoading(false);
+                    if (isMounted) setLoading(false);
                     return;
                 }
 
-                // If no session exists, the onAuthStateChange won't fire
-                // so we need to set loading to false here
-                if (!session) {
-                    console.log('AuthProvider: No existing session found');
-                    setLoading(false);
+                if (session?.user) {
+                    // Session exists, onAuthStateChange should have been called
+                    // but let's also handle it here for safety
+                    const userProfile = await createUserFromAuth(session.user);
+                    console.log('AuthProvider: Session found, user:', userProfile.email);
+                    if (isMounted) {
+                        setUser(userProfile);
+                        setLoading(false);
+                    }
+                } else {
+                    console.log('AuthProvider: No existing session');
+                    if (isMounted) setLoading(false);
                 }
-                // If session exists, onAuthStateChange will handle it
             } catch (error) {
                 console.error('Auth init error:', error);
-                setLoading(false);
+                if (isMounted) setLoading(false);
             }
         };
 
         checkSession();
 
         return () => {
+            isMounted = false;
             subscription.unsubscribe();
         };
     }, []);
