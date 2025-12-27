@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, createContext, useContext, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 
@@ -10,6 +10,18 @@ export interface User {
     name: string;
     role: UserRole;
 }
+
+interface AuthContextType {
+    user: User | null;
+    loading: boolean;
+    signIn: (email: string, password?: string) => Promise<void>;
+    signUp: (name: string, email: string, password?: string) => Promise<void>;
+    signOut: () => Promise<void>;
+    updateUserRole: (userId: string, newRole: UserRole) => Promise<void>;
+    getAllUsers: () => Promise<User[]>;
+}
+
+const AuthContext = createContext<AuthContextType | null>(null);
 
 const OWNER_EMAIL = "mayurgunjal13@gmail.com";
 
@@ -46,7 +58,11 @@ const createUserFromAuth = async (supabaseUser: SupabaseUser): Promise<User> => 
     };
 };
 
-export function useAuth() {
+interface AuthProviderProps {
+    children: ReactNode;
+}
+
+export function AuthProvider({ children }: AuthProviderProps) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -94,10 +110,6 @@ export function useAuth() {
                 setLoading(false);
             }
         );
-
-        // Note: Removed auto-logout on beforeunload as it was causing issues
-        // with page refreshes and navigation. Sessions will persist until
-        // the user explicitly logs out or the session expires.
 
         return () => {
             subscription.unsubscribe();
@@ -212,7 +224,7 @@ export function useAuth() {
         }
     };
 
-    return {
+    const value: AuthContextType = {
         user,
         loading,
         signIn,
@@ -221,4 +233,18 @@ export function useAuth() {
         updateUserRole,
         getAllUsers
     };
+
+    return (
+        <AuthContext.Provider value={value}>
+            {children}
+        </AuthContext.Provider>
+    );
+}
+
+export function useAuth(): AuthContextType {
+    const context = useContext(AuthContext);
+    if (!context) {
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
 }
