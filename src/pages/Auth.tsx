@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -14,10 +14,15 @@ const Auth = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { signIn, signUp, user, loading } = useAuth();
     const navigate = useNavigate();
+    const hasNavigated = useRef(false);
 
     // Redirect to home when user is authenticated
     useEffect(() => {
-        if (user && !loading) {
+        console.log('Auth.tsx useEffect - user:', user?.email, 'loading:', loading, 'hasNavigated:', hasNavigated.current);
+        if (user && !loading && !hasNavigated.current) {
+            console.log('Auth.tsx: User authenticated, navigating to home');
+            hasNavigated.current = true;
+            setIsSubmitting(false);
             navigate("/", { replace: true });
         }
     }, [user, loading, navigate]);
@@ -37,6 +42,7 @@ const Auth = () => {
         }
 
         setIsSubmitting(true);
+        console.log('Auth.tsx: Starting', isSignUp ? 'signUp' : 'signIn');
 
         try {
             if (isSignUp) {
@@ -44,8 +50,18 @@ const Auth = () => {
             } else {
                 await signIn(email, password);
             }
-            // Don't navigate here - useEffect will handle redirect when user state updates
+            console.log('Auth.tsx: Sign in/up completed successfully');
+            // The signIn/signUp triggers onAuthStateChange which updates user state
+            // The useEffect above will handle navigation when user state updates
+            // Set a timeout to reset isSubmitting if navigation doesn't happen
+            setTimeout(() => {
+                if (!hasNavigated.current) {
+                    console.log('Auth.tsx: Navigation timeout, checking user state');
+                    setIsSubmitting(false);
+                }
+            }, 5000);
         } catch (err) {
+            console.error('Auth.tsx: Sign in/up error:', err);
             setError(err instanceof Error ? err.message : "An error occurred");
             setIsSubmitting(false);
         }
