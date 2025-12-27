@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from "react";
+import { useState, useEffect, createContext, useContext, ReactNode, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 
@@ -65,51 +65,66 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const initialLoadDone = useRef(false);
 
     useEffect(() => {
-        // Get initial session with timeout to prevent infinite loading
-        const initAuth = async () => {
-            // Set a timeout to ensure loading state doesn't hang
-            const timeoutId = setTimeout(() => {
-                console.log('Auth init timeout - setting loading false');
-                setLoading(false);
-            }, 5000); // 5 second timeout
+        // Prevent double initialization in strict mode
+        if (initialLoadDone.current) return;
+        initialLoadDone.current = true;
 
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
+        console.log('AuthProvider: Starting initialization');
+
+        // Set up auth state change listener FIRST
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+            async (event: string, session: Session | null) => {
+                console.log('Auth state changed:', event, session?.user?.email);
 
                 if (session?.user) {
-                    const userProfile = await createUserFromAuth(session.user);
-                    setUser(userProfile);
+                    try {
+                        const userProfile = await createUserFromAuth(session.user);
+                        console.log('User profile created:', userProfile.email);
+                        setUser(userProfile);
+                    } catch (error) {
+                        console.error('Error creating user profile:', error);
+                        setUser(null);
+                    }
                 } else {
+                    console.log('No user in session, setting user to null');
                     setUser(null);
                 }
+
+                // Always set loading to false after auth state change
+                setLoading(false);
+            }
+        );
+
+        // Then get the initial session - this will trigger onAuthStateChange
+        // if there's an existing session
+        const checkSession = async () => {
+            try {
+                console.log('AuthProvider: Checking for existing session');
+                const { data: { session }, error } = await supabase.auth.getSession();
+
+                if (error) {
+                    console.error('Error getting session:', error);
+                    setLoading(false);
+                    return;
+                }
+
+                // If no session exists, the onAuthStateChange won't fire
+                // so we need to set loading to false here
+                if (!session) {
+                    console.log('AuthProvider: No existing session found');
+                    setLoading(false);
+                }
+                // If session exists, onAuthStateChange will handle it
             } catch (error) {
                 console.error('Auth init error:', error);
-                setUser(null);
-            } finally {
-                clearTimeout(timeoutId);
                 setLoading(false);
             }
         };
 
-        initAuth();
-
-        // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (event: string, session: Session | null) => {
-                console.log('Auth state changed:', event);
-
-                if (session?.user) {
-                    const userProfile = await createUserFromAuth(session.user);
-                    setUser(userProfile);
-                } else {
-                    setUser(null);
-                }
-
-                setLoading(false);
-            }
-        );
+        checkSession();
 
         return () => {
             subscription.unsubscribe();
