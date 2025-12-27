@@ -51,8 +51,14 @@ export function useAuth() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Get initial session
+        // Get initial session with timeout to prevent infinite loading
         const initAuth = async () => {
+            // Set a timeout to ensure loading state doesn't hang
+            const timeoutId = setTimeout(() => {
+                console.log('Auth init timeout - setting loading false');
+                setLoading(false);
+            }, 5000); // 5 second timeout
+
             try {
                 const { data: { session } } = await supabase.auth.getSession();
 
@@ -66,6 +72,7 @@ export function useAuth() {
                 console.error('Auth init error:', error);
                 setUser(null);
             } finally {
+                clearTimeout(timeoutId);
                 setLoading(false);
             }
         };
@@ -88,17 +95,12 @@ export function useAuth() {
             }
         );
 
-        // Auto-logout when browser tab/window is closed
-        const handleBeforeUnload = () => {
-            // Sign out when tab is closed
-            supabase.auth.signOut();
-        };
-
-        window.addEventListener('beforeunload', handleBeforeUnload);
+        // Note: Removed auto-logout on beforeunload as it was causing issues
+        // with page refreshes and navigation. Sessions will persist until
+        // the user explicitly logs out or the session expires.
 
         return () => {
             subscription.unsubscribe();
-            window.removeEventListener('beforeunload', handleBeforeUnload);
         };
     }, []);
 
